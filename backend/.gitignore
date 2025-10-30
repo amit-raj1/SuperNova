@@ -1,0 +1,32 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Build
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Keys (e.g., generated RSA keys, keystore files)
+keys/
+*.pem
+*.key
+*.p12
+
+# SQLite and local DBs
+*.sqlite
+*.sqlite3
+/db/*.sqlite
+
+# Misc
+coverage/
+*.tsbuildinfo

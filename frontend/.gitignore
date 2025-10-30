@@ -1,0 +1,25 @@
+# Node
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Vite cache
+.vite/
+.locales-cache/
+
+# Environment
+.env
+.env.*.local
+.env.local
+
+# TypeScript and caches
+*.tsbuildinfo
+.cache/
+storybook-static/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
