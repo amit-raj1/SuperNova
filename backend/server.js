@@ -15,6 +15,7 @@ const authRoutes = require('./routes/auth');
 const googleAuthRoutes = require('./routes/googleAuth');
 const ticketRoutes = require('./routes/ticket');
 const adminRoutes = require('./routes/admin');
+const roadmapRoutes = require('./routes/roadmapRoutes'); // <-- ADDED
 
 const app = express();
 
@@ -157,6 +158,8 @@ app.use('/api/tickets', ticketRoutes);
 console.log('✅ Ticket routes registered at /api/tickets');
 app.use('/api/admin', adminRoutes);
 console.log('✅ Admin routes registered at /api/admin');
+app.use('/api/roadmap', roadmapRoutes); // <-- ADDED
+console.log('✅ Roadmap routes registered at /api/roadmap'); // <-- ADDED
 console.log('🎉 All routes registered successfully\n');
 
 // 🔄 Health check

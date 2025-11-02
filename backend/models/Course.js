@@ -26,6 +26,15 @@ const pdfNoteSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// --- FIX START ---
+// Define a schema for lectures
+const lectureSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  url: { type: String, required: true },
+  duration: { type: String },
+});
+// --- FIX END ---
+
 const courseSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // For backward compatibility
@@ -38,6 +47,11 @@ const courseSchema = new mongoose.Schema({
   topics: [topicSchema],       
   timetable: [timetableSchema], 
   pdfNotes: [pdfNoteSchema],
+  
+  // --- FIX START ---
+  // Add the lectures array
+  lectures: [lectureSchema],
+  // --- FIX END ---
 
   progress: {
     completedTopics: { type: Number, default: 0 },
@@ -58,6 +72,12 @@ const courseSchema = new mongoose.Schema({
   hasTimetable: { type: Boolean, default: false },
   hasQuiz: { type: Boolean, default: false },
   hasPdfNotes: { type: Boolean, default: false },
+  
+  // --- FIX START ---
+  // Add flags for new features
+  hasLectures: { type: Boolean, default: false },
+  hasRoadmap: { type: Boolean, default: false },
+  // --- FIX END ---
 
   createdAt: { type: Date, default: Date.now }
 });

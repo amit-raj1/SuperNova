@@ -57,8 +57,9 @@ const Navbar = () => {
           className="h-10 w-10 rounded-full bg-card p-1 shadow-lg"
           style={{ boxShadow: "0 10px 30px hsl(var(--primary) / 0.3)" }}
         >
+          {/* ✅ CHANGED: Corrected the image path */}
           <img
-            src="./assests/logo.webp"
+            src="/assests/logo.webp"
             alt="EduAI Logo"
             className="h-full w-full object-cover rounded-full"
           />
@@ -126,8 +127,9 @@ const Navbar = () => {
               onClick={() => setShowDropdown(!showDropdown)}
               className="flex items-center gap-2 px-4 py-2 rounded-full hover:bg-foreground/10 focus:outline-none focus:ring-2 focus:ring-primary transition duration-200"
             >
+              {/* ✅ CHANGED: Corrected the image path */}
               <img
-                src="./assests/s.jpg"
+                src="/assests/s.jpg"
                 alt="User Avatar"
                 className="w-9 h-9 rounded-full border-2 border-white shadow-sm"
               />
@@ -142,8 +144,9 @@ const Navbar = () => {
               >
                 {/* User Info */}
                 <div className="flex items-center gap-4">
+                  {/* ✅ CHANGED: Corrected the image path */}
                   <img
-                    src="./assests/s.jpg"
+                    src="/assests/s.jpg"
                     alt="User Avatar"
                     className="w-14 h-14 rounded-full border-2"
                     style={{

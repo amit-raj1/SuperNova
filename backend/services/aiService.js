@@ -871,3 +871,63 @@ We encountered an error while processing your PDF. Please try again with a diffe
 *These notes were generated as a fallback due to an error processing your PDF.*`;
   }
 };
+
+// <-- ADDED: New function to generate a roadmap -->
+exports.generateRoadmap = async (subject, difficulty) => {
+  try {
+    const prompt = `
+    You are an expert curriculum designer. Create a high-level learning roadmap for a course on "${subject}" at a "${difficulty}" level.
+    
+    Requirements:
+    1.  Generate 5-7 distinct learning stages or modules.
+    2.  For each stage, provide:
+        * A "title" (e.g., "Module 1: The Basics").
+        * A "description" (2-3 sentences explaining the learning objectives for this stage).
+        * An "estimatedDuration" (e.g., "Week 1", "3-4 days", "Week 2-3").
+    
+    Format your response as a valid JSON array of objects. Do NOT include any text before or after the JSON array.
+
+    Example:
+    [
+      {
+        "title": "Module 1: Introduction to ${subject}",
+        "description": "Understand the fundamental concepts, key terminology, and the historical context of ${subject}. Establish a solid foundation for more advanced topics.",
+        "estimatedDuration": "Week 1"
+      },
+      {
+        "title": "Module 2: Core Principles",
+        "description": "Dive into the core principles that govern ${subject}. This module will cover the essential theories and models that you will use throughout the course.",
+        "estimatedDuration": "Week 2-3"
+      }
+    ]
+    `;
+
+    console.log(`Generating roadmap for: ${subject} (${difficulty})`);
+    const result = await geminiModel.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    // Extract JSON from the response
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      const jsonStr = jsonMatch[0];
+      const steps = JSON.parse(jsonStr);
+      if (Array.isArray(steps) && steps.length > 0) {
+        console.log(`Successfully generated ${steps.length} roadmap steps.`);
+        return steps;
+      }
+    }
+    throw new Error('Failed to parse valid JSON from AI response.');
+
+  } catch (error) {
+    console.error('Error generating roadmap:', error);
+    // Fallback to mock data on error
+    return [
+      {
+        title: "Module 1: Introduction",
+        description: "An error occurred during generation. This is a placeholder. Please try again.",
+        estimatedDuration: "N/A"
+      }
+    ];
+  }
+};

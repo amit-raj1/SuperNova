@@ -2,10 +2,27 @@ import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Navbar from "../components/Navbar";
-import { CalendarClock, Loader2, ArrowLeft, Plus, Trash2, Clock, BookOpen, Coffee, CheckCircle, Circle } from "lucide-react";
+import {
+  CalendarClock,
+  Loader2,
+  ArrowLeft,
+  Plus,
+  Trash2,
+  Clock,
+  BookOpen,
+  Coffee,
+  CheckCircle,
+  Circle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { generateTimetable as apiGenerateTimetable, getCourseTimetable, markSessionCompleted, getCourseById } from "../services/courseService";
+import {
+  generateTimetable as apiGenerateTimetable,
+  getCourseTimetable,
+  markSessionCompleted,
+  getCourseById,
+} from "../services/courseService";
+import { useTheme } from "../context/ThemeContext"; // ✅ Added theme import
 
 // Define interfaces for our data structures
 interface StudyTopic {
@@ -30,42 +47,47 @@ interface TimetableEntry {
 // Helper function to format time properly
 const formatTimeString = (timeStr: string): string => {
   // Handle cases where time might be in decimal format like "11.25:00"
-  if (timeStr.includes('.')) {
-    const parts = timeStr.split(':');
+  if (timeStr.includes(".")) {
+    const parts = timeStr.split(":");
     const hourPart = parts[0];
-    
-    if (hourPart.includes('.')) {
-      const [hours, fraction] = hourPart.split('.');
+
+    if (hourPart.includes(".")) {
+      const [hours, fraction] = hourPart.split(".");
       let hoursNum = parseInt(hours, 10);
       let minutesNum = Math.round(parseFloat(`0.${fraction}`) * 60);
-      
+
       // Handle overflow
       if (minutesNum === 60) {
         hoursNum += 1;
         minutesNum = 0;
       }
-      
+
       // Handle 24+ hour times
       if (hoursNum >= 24) {
         hoursNum = hoursNum % 24;
       }
-      
-      return `${String(hoursNum).padStart(2, '0')}:${String(minutesNum).padStart(2, '0')}`;
+
+      return `${String(hoursNum).padStart(2, "0")}:${String(
+        minutesNum
+      ).padStart(2, "0")}`;
     }
   }
-  
+
   // Handle regular time strings but ensure proper formatting
   try {
-    const [hours, minutes] = timeStr.split(':');
+    const [hours, minutes] = timeStr.split(":");
     let hoursNum = parseInt(hours, 10);
     let minutesNum = parseInt(minutes, 10);
-    
+
     // Handle 24+ hour times
     if (hoursNum >= 24) {
       hoursNum = hoursNum % 24;
     }
-    
-    return `${String(hoursNum).padStart(2, '0')}:${String(minutesNum).padStart(2, '0')}`;
+
+    return `${String(hoursNum).padStart(2, "0")}:${String(minutesNum).padStart(
+      2,
+      "0"
+    )}`;
   } catch (e) {
     // If parsing fails, return the original string
     return timeStr;
@@ -73,12 +95,16 @@ const formatTimeString = (timeStr: string): string => {
 };
 
 // Local timetable generator function as a fallback
-const generateLocalTimetable = (startDate: string, endDate: string, topics: StudyTopic[]): TimetableEntry[] => {
+const generateLocalTimetable = (
+  startDate: string,
+  endDate: string,
+  topics: StudyTopic[]
+): TimetableEntry[] => {
   // Simple implementation that creates a basic timetable
   const timetable: TimetableEntry[] = [];
   const start = new Date(startDate);
   const end = new Date(endDate);
-  
+
   // Get all dates in the range
   const dates: Date[] = [];
   const currentDate = new Date(start);
@@ -86,28 +112,30 @@ const generateLocalTimetable = (startDate: string, endDate: string, topics: Stud
     dates.push(new Date(currentDate));
     currentDate.setDate(currentDate.getDate() + 1);
   }
-  
+
   // Distribute topics across dates
   let topicIndex = 0;
   for (const date of dates) {
     if (topicIndex >= topics.length) break;
-    
+
     const sessions: StudySession[] = [];
     let currentHour = 9; // Start at 9 AM
-    
+
     // Add up to 3 topics per day
     for (let i = 0; i < 3; i++) {
       if (topicIndex >= topics.length) break;
-      
+
       const topic = topics[topicIndex];
       const duration = topic.hours * 60; // Convert to minutes
-      
+
       // Format times
-      const startTime = `${String(currentHour).padStart(2, '0')}:00`;
+      const startTime = `${String(currentHour).padStart(2, "0")}:00`;
       const endHour = currentHour + Math.floor(topic.hours);
       const endMinutes = Math.round((topic.hours % 1) * 60);
-      const endTime = `${String(endHour).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
-      
+      const endTime = `${String(endHour).padStart(2, "0")}:${String(
+        endMinutes
+      ).padStart(2, "0")}`;
+
       // Add study session
       sessions.push({
         topic: topic.title,
@@ -115,42 +143,44 @@ const generateLocalTimetable = (startDate: string, endDate: string, topics: Stud
         endTime,
         duration,
         isBreak: false,
-        completed: false
+        completed: false,
       });
-      
+
       // Add a break unless it's the last topic
       if (i < 2 && topicIndex < topics.length - 1) {
         const breakStartTime = endTime;
         const breakEndHour = endHour + (endMinutes + 15 >= 60 ? 1 : 0);
         const breakEndMinutes = (endMinutes + 15) % 60;
-        const breakEndTime = `${String(breakEndHour).padStart(2, '0')}:${String(breakEndMinutes).padStart(2, '0')}`;
-        
+        const breakEndTime = `${String(breakEndHour).padStart(2, "0")}:${String(
+          breakEndMinutes
+        ).padStart(2, "0")}`;
+
         sessions.push({
           topic: "Break",
           startTime: breakStartTime,
           endTime: breakEndTime,
           duration: 15, // 15 minute break
           isBreak: true,
-          completed: false
+          completed: false,
         });
-        
+
         currentHour = breakEndHour + (breakEndMinutes > 0 ? 1 : 0);
       } else {
         currentHour = endHour + 1; // Move to next hour for next topic
       }
-      
+
       topicIndex++;
     }
-    
+
     // Add this day to the timetable
     if (sessions.length > 0) {
       timetable.push({
-        date: date.toISOString().split('T')[0],
-        sessions
+        date: date.toISOString().split("T")[0],
+        sessions,
       });
     }
   }
-  
+
   return timetable;
 };
 
@@ -159,20 +189,26 @@ const TimetablePage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
-  const { courseId, subject, level, generate } = location.state || { courseId: "", subject: "", level: "", generate: false };
-  
+  const { courseId, subject, level, generate } = location.state || {
+    courseId: "",
+    subject: "",
+    level: "",
+    generate: false,
+  };
+  const { isDark, isWhite } = useTheme(); // ✅ Get theme state
+
   // Redirect admin users to admin dashboard
   useEffect(() => {
-    if (user?.role === 'admin') {
+    if (user?.role === "admin") {
       toast({
         title: "Access Restricted",
         description: "Admin users cannot access learner features.",
         variant: "destructive",
       });
-      navigate('/admin');
+      navigate("/admin");
     }
   }, [user, navigate, toast]);
-  
+
   // State management
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -184,36 +220,39 @@ const TimetablePage = () => {
     new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
   );
   const [studyTopics, setStudyTopics] = useState<StudyTopic[]>([
-    { title: "", hours: 2 }
+    { title: "", hours: 2 },
   ]);
 
   // Function to load course topics
   const loadCourseTopics = async () => {
     try {
       if (!courseId) return;
-      
+
       console.log("Loading topics for course:", courseId);
       const response = await getCourseById(courseId);
-      
+
       if (response.success && response.course) {
         const course = response.course;
-        
+
         if (course.topics && course.topics.length > 0) {
           // Map course topics to study topics format
-          const courseTopics = course.topics.map(topic => ({
+          const courseTopics = course.topics.map((topic) => ({
             title: topic.title,
-            hours: topic.estimatedHours || 2
+            hours: topic.estimatedHours || 2,
           }));
-          
+
           console.log("Loaded topics from course:", courseTopics);
           setStudyTopics(courseTopics);
         } else {
           console.log("No topics found in course, using default topics");
           // Set default topics based on subject
           const defaultTopics = [
-            { title: `Introduction to ${subject || 'the Subject'}`, hours: 1.5 },
-            { title: `Core Concepts in ${subject || 'the Subject'}`, hours: 2 },
-            { title: `Advanced Topics in ${subject || 'the Subject'}`, hours: 3 }
+            { title: `Introduction to ${subject || "the Subject"}`, hours: 1.5 },
+            { title: `Core Concepts in ${subject || "the Subject"}`, hours: 2 },
+            {
+              title: `Advanced Topics in ${subject || "the Subject"}`,
+              hours: 3,
+            },
           ];
           setStudyTopics(defaultTopics);
         }
@@ -227,29 +266,35 @@ const TimetablePage = () => {
       });
     }
   };
-  
+
   // Function to fetch existing timetable
   const fetchExistingTimetable = async () => {
     try {
       if (!courseId) return;
-      
+
       console.log("Fetching existing timetable for course:", courseId);
       const response = await getCourseTimetable(courseId);
-      
+
       if (response.success && response.timetable) {
         console.log("Loaded existing timetable:", response.timetable);
         setTimetable(response.timetable);
-        
+
         // Also update dates and topics if available
         if (response.startDate) {
-          setStartDate(new Date(response.startDate).toISOString().split('T')[0]);
+          setStartDate(
+            new Date(response.startDate).toISOString().split("T")[0]
+          );
         }
-        
+
         if (response.endDate) {
-          setEndDate(new Date(response.endDate).toISOString().split('T')[0]);
+          setEndDate(new Date(response.endDate).toISOString().split("T")[0]);
         }
-        
-        if (response.topics && Array.isArray(response.topics) && response.topics.length > 0) {
+
+        if (
+          response.topics &&
+          Array.isArray(response.topics) &&
+          response.topics.length > 0
+        ) {
           setStudyTopics(response.topics);
         }
       } else {
@@ -268,26 +313,33 @@ const TimetablePage = () => {
   useEffect(() => {
     const initializePage = async () => {
       setLoading(true);
-      
+
       if (courseId) {
         console.log("Course ID detected:", courseId);
-        
+
         // Check if we have topics in location state
-        if (location.state?.topics && Array.isArray(location.state.topics) && location.state.topics.length > 0) {
+        if (
+          location.state?.topics &&
+          Array.isArray(location.state.topics) &&
+          location.state.topics.length > 0
+        ) {
           console.log("Using topics from location state:", location.state.topics);
-          
+
           const stateTopics = location.state.topics.map((topic: any) => ({
-            title: typeof topic === 'string' ? topic : (topic.title || `Topic ${Math.random().toString(36).substring(7)}`),
-            hours: typeof topic === 'object' && topic.hours ? topic.hours : 2
+            title:
+              typeof topic === "string"
+                ? topic
+                : topic.title || `Topic ${Math.random().toString(36).substring(7)}`,
+            hours: typeof topic === "object" && topic.hours ? topic.hours : 2,
           }));
-          
+
           setStudyTopics(stateTopics);
         }
-        
+
         if (generate) {
           // Load topics from course but don't auto-generate
           await loadCourseTopics();
-          
+
           // Let the user click the generate button themselves
           console.log("Topics loaded, waiting for user to click generate");
         } else {
@@ -297,18 +349,21 @@ const TimetablePage = () => {
       } else {
         console.log("No course ID provided");
       }
-      
+
       setLoading(false);
     };
-    
+
     initializePage();
   }, [courseId, subject, level, generate]);
 
   // Handle date change
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'start' | 'end') => {
+  const handleDateChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: "start" | "end"
+  ) => {
     const newDate = e.target.value;
-    
-    if (type === 'start') {
+
+    if (type === "start") {
       setStartDate(newDate);
     } else {
       setEndDate(newDate);
@@ -316,15 +371,19 @@ const TimetablePage = () => {
   };
 
   // Handle topic change
-  const handleTopicChange = (index: number, field: 'title' | 'hours', value: string | number) => {
+  const handleTopicChange = (
+    index: number,
+    field: "title" | "hours",
+    value: string | number
+  ) => {
     const updatedTopics = [...studyTopics];
-    
-    if (field === 'title') {
+
+    if (field === "title") {
       updatedTopics[index].title = value as string;
     } else {
       updatedTopics[index].hours = Number(value);
     }
-    
+
     setStudyTopics(updatedTopics);
   };
 
@@ -343,7 +402,7 @@ const TimetablePage = () => {
       });
       return;
     }
-    
+
     const updatedTopics = [...studyTopics];
     updatedTopics.splice(index, 1);
     setStudyTopics(updatedTopics);
@@ -352,10 +411,10 @@ const TimetablePage = () => {
   // Format date for display
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'short',
-      day: 'numeric'
+    return date.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
     });
   };
 
@@ -364,53 +423,66 @@ const TimetablePage = () => {
     try {
       if (!courseId) {
         // If no course ID, generate a local timetable
-        const localTimetable = generateLocalTimetable(startDate, endDate, topics);
+        const localTimetable = generateLocalTimetable(
+          startDate,
+          endDate,
+          topics
+        );
         setTimetable(localTimetable);
         return;
       }
-      
+
       // Validate topics and ensure hours are set to 0 for AI assignment
       const validTopics = topics
-        .filter(topic => topic && typeof topic === 'object')
-        .filter(topic => (topic.title || '').trim().length > 0) // Filter out topics with empty titles
-        .map(topic => ({
+        .filter((topic) => topic && typeof topic === "object")
+        .filter((topic) => (topic.title || "").trim().length > 0) // Filter out topics with empty titles
+        .map((topic) => ({
           ...topic,
-          title: (topic.title || '').trim(),
-          hours: 0 // Set hours to 0 so the backend AI will assign appropriate hours
+          title: (topic.title || "").trim(),
+          hours: 0, // Set hours to 0 so the backend AI will assign appropriate hours
         }));
-      
+
       if (!validTopics || validTopics.length === 0) {
         console.error("No valid topics to generate timetable with");
         toast({
           title: "No Valid Topics",
-          description: "Please add at least one topic with a title. Empty topics will be ignored.",
+          description:
+            "Please add at least one topic with a title. Empty topics will be ignored.",
           variant: "destructive",
         });
-        const localTimetable = generateLocalTimetable(startDate, endDate, [{ title: "Default Topic", hours: 2 }]);
+        const localTimetable = generateLocalTimetable(
+          startDate,
+          endDate,
+          [{ title: "Default Topic", hours: 2 }]
+        );
         setTimetable(localTimetable);
         return;
       }
-      
+
       console.log("Generating timetable with topics:", validTopics);
-      
+
       // Otherwise, use the API to generate a timetable
       const response = await apiGenerateTimetable(courseId, {
         startDate,
         endDate,
-        topics: validTopics
+        topics: validTopics,
       });
-      
+
       if (response.success && response.timetable) {
         console.log("Generated timetable from API:", response.timetable);
         setTimetable(response.timetable);
       } else {
         console.log("API timetable generation failed, using local generation");
-        const localTimetable = generateLocalTimetable(startDate, endDate, topics);
+        const localTimetable = generateLocalTimetable(
+          startDate,
+          endDate,
+          topics
+        );
         setTimetable(localTimetable);
       }
     } catch (error) {
       console.error("Error generating timetable:", error);
-      
+
       // Fallback to local generation
       console.log("Falling back to local timetable generation");
       const localTimetable = generateLocalTimetable(startDate, endDate, topics);
@@ -422,11 +494,11 @@ const TimetablePage = () => {
   const handleGenerateTimetable = async () => {
     try {
       setGenerating(true);
-      
+
       // Validate dates
       const start = new Date(startDate);
       const end = new Date(endDate);
-      
+
       if (end < start) {
         toast({
           title: "Invalid Date Range",
@@ -436,11 +508,12 @@ const TimetablePage = () => {
         setGenerating(false);
         return;
       }
-      
+
       // Calculate date range info
-      const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const daysDiff =
+        Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
       const isVeryShortRange = daysDiff <= 2;
-      
+
       // Count weekdays
       let weekdays = 0;
       const currentDate = new Date(start);
@@ -449,21 +522,22 @@ const TimetablePage = () => {
         if (day !== 0 && day !== 6) weekdays++;
         currentDate.setDate(currentDate.getDate() + 1);
       }
-      
+
       // For very short ranges, include weekends
       const availableDays = isVeryShortRange ? daysDiff : weekdays;
       const effectiveDays = isVeryShortRange ? availableDays : weekdays;
-      
+
       // Calculate how many hours we can reasonably fit per day
       const maxHoursPerDay = isVeryShortRange ? 8 : 5; // Allow more hours for short ranges
       const totalTopics = studyTopics.length;
-      
+
       // Show informational messages but don't prevent generation
       if (effectiveDays === 0) {
         // This should never happen since we always have at least one day
         toast({
           title: "Note",
-          description: "Very short date range selected. We'll create a compact study plan for you.",
+          description:
+            "Very short date range selected. We'll create a compact study plan for you.",
           variant: "default",
         });
       } else if (isVeryShortRange) {
@@ -481,35 +555,36 @@ const TimetablePage = () => {
           variant: "default",
         });
       }
-  
+
       // Validate topics before generating and set hours to 0 for AI assignment
       const validatedTopics = studyTopics
-        .filter(topic => topic && typeof topic === 'object') // Ensure each topic is an object
-        .filter(topic => (topic.title || '').trim().length > 0) // Filter out topics with empty titles
-        .map(topic => ({
+        .filter((topic) => topic && typeof topic === "object") // Ensure each topic is an object
+        .filter((topic) => (topic.title || "").trim().length > 0) // Filter out topics with empty titles
+        .map((topic) => ({
           ...topic,
-          title: (topic.title || '').trim(),
-          hours: 0 // Set hours to 0 so the backend AI will assign appropriate hours
+          title: (topic.title || "").trim(),
+          hours: 0, // Set hours to 0 so the backend AI will assign appropriate hours
         }));
-      
+
       if (!validatedTopics || validatedTopics.length === 0) {
         console.error("No valid topics after validation");
         toast({
           title: "No Valid Topics",
-          description: "Please add at least one topic with a title. Empty topics will be ignored.",
+          description:
+            "Please add at least one topic with a title. Empty topics will be ignored.",
           variant: "destructive",
         });
         setGenerating(false);
         return;
       }
-      
+
       console.log("Using validated topics for generation:", validatedTopics);
-      
+
       // Generate the timetable with the validated topics
       await generateTimetableWithTopics(validatedTopics);
     } catch (error) {
       console.error("Error in handleGenerateTimetable:", error);
-      
+
       toast({
         title: "Error",
         description: "Failed to generate study planner. Please try again.",
@@ -521,31 +596,42 @@ const TimetablePage = () => {
   };
 
   // Toggle session completed status
-  const toggleSessionCompleted = async (dayIndex: number, sessionIndex: number, currentStatus: boolean) => {
+  const toggleSessionCompleted = async (
+    dayIndex: number,
+    sessionIndex: number,
+    currentStatus: boolean
+  ) => {
     try {
       // Create a deep copy of the timetable
       const updatedTimetable = JSON.parse(JSON.stringify(timetable));
-      
+
       // Toggle the completed status
-      updatedTimetable[dayIndex].sessions[sessionIndex].completed = !currentStatus;
-      
+      updatedTimetable[dayIndex].sessions[sessionIndex].completed =
+        !currentStatus;
+
       // Update the state immediately for a responsive UI
       setTimetable(updatedTimetable);
-      
+
       // If we have a course ID, update the status on the server
       if (courseId) {
         const day = timetable[dayIndex];
         const session = day.sessions[sessionIndex];
-        
-        const response = await markSessionCompleted(courseId, dayIndex, sessionIndex, !currentStatus);
-        
+
+        const response = await markSessionCompleted(
+          courseId,
+          dayIndex,
+          sessionIndex,
+          !currentStatus
+        );
+
         if (!response.success) {
           console.error("Failed to update session status on server");
-          
+
           // Revert the change if the server update failed
-          updatedTimetable[dayIndex].sessions[sessionIndex].completed = currentStatus;
+          updatedTimetable[dayIndex].sessions[sessionIndex].completed =
+            currentStatus;
           setTimetable(updatedTimetable);
-          
+
           toast({
             title: "Error",
             description: "Failed to update session status. Please try again.",
@@ -555,13 +641,13 @@ const TimetablePage = () => {
       }
     } catch (error) {
       console.error("Error toggling session completed:", error);
-      
+
       let errorMessage = "Failed to update session status. Please try again.";
-      
+
       if (error instanceof Error) {
         errorMessage = error.message;
       }
-      
+
       toast({
         title: "Error",
         description: errorMessage,
@@ -570,17 +656,66 @@ const TimetablePage = () => {
     }
   };
 
+  // ✅ Define theme classes
+  const bgClass = isDark
+    ? "bg-gradient-to-br from-gray-950 via-black to-gray-900 text-gray-100"
+    : isWhite
+    ? "bg-white text-gray-900"
+    : "bg-gradient-to-br from-purple-100 via-pink-50 to-indigo-100 text-gray-800";
+
+  const textColor = isDark
+    ? "text-gray-200"
+    : isWhite
+    ? "text-gray-900"
+    : "text-gray-900";
+
+  const mutedTextColor = isDark ? "text-gray-400" : "text-gray-600";
+
+  const cardBgClass = isDark
+    ? "bg-gray-900 border-purple-500/30"
+    : isWhite
+    ? "bg-white border-gray-200"
+    : "bg-white border-gray-200";
+
+  const formBgClass = isDark
+    ? "bg-gray-800"
+    : isWhite
+    ? "bg-gray-50 border border-gray-100"
+    : "bg-gray-50 border border-gray-100";
+
+  const inputBgClass = isDark
+    ? "bg-gray-700 border-gray-600 text-white"
+    : isWhite
+    ? "bg-white border-gray-300 text-gray-900"
+    : "bg-white border-gray-300 text-gray-900";
+
+  // Session card classes
+  const sessionBreakClass = isDark
+    ? "bg-gray-700/50 border-gray-600"
+    : "bg-gray-100 border-gray-200";
+  const sessionCompletedClass = isDark
+    ? "bg-green-900/20 border-green-800/30"
+    : "bg-green-50 border-green-200";
+  const sessionDefaultClass = isDark
+    ? "bg-purple-900/20 border-purple-800/30"
+    : "bg-purple-50 border-purple-200";
+
   return (
-    <div className="min-h-screen bg-black text-white">
+    // ✅ Applied theme bgClass
+    <div className={`min-h-screen ${bgClass}`}>
       <Navbar />
       <div className="pt-24 px-4 max-w-6xl mx-auto pb-16">
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-2 flex items-center gap-3">
+            {/* ✅ Applied theme textColor */}
+            <h1
+              className={`text-3xl md:text-4xl font-bold mb-2 flex items-center gap-3 ${textColor}`}
+            >
               <CalendarClock size={32} className="text-purple-400" />
               Study Planner
             </h1>
-            <p className="text-gray-400">
+            {/* ✅ Applied theme mutedTextColor */}
+            <p className={`${mutedTextColor}`}>
               {subject} ({level})
             </p>
           </div>
@@ -596,74 +731,99 @@ const TimetablePage = () => {
           <div className="flex justify-center items-center h-[60vh]">
             <div className="flex flex-col items-center">
               <Loader2 size={40} className="animate-spin text-purple-500 mb-4" />
-              <p className="text-xl">
-                {generating ? "Generating your study plan..." : "Loading study plan..."}
+              {/* ✅ Applied theme textColor */}
+              <p className={`text-xl ${textColor}`}>
+                {generating
+                  ? "Generating your study plan..."
+                  : "Loading study plan..."}
               </p>
             </div>
           </div>
         ) : (
-          <div className="bg-gray-900 rounded-xl p-6 shadow-md border border-purple-500/30">
+          // ✅ Applied theme cardBgClass
+          <div className={`rounded-xl p-6 shadow-md ${cardBgClass}`}>
             {/* Study Planner Form */}
-            <div className="mb-8 p-6 bg-gray-800 rounded-lg">
-              <h3 className="text-xl font-semibold mb-6">Create Your Study Plan</h3>
-              
+            {/* ✅ Applied theme formBgClass */}
+            <div className={`mb-8 p-6 rounded-lg ${formBgClass}`}>
+              {/* ✅ Applied theme textColor */}
+              <h3 className={`text-xl font-semibold mb-6 ${textColor}`}>
+                Create Your Study Plan
+              </h3>
+
               {/* Date Range */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                  {/* ✅ Applied theme mutedTextColor */}
+                  <label
+                    className={`block text-sm font-medium mb-2 ${mutedTextColor}`}
+                  >
                     Start Date
                   </label>
+                  {/* ✅ Applied theme inputBgClass */}
                   <input
                     type="date"
                     value={startDate}
-                    onChange={(e) => handleDateChange(e, 'start')}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white"
+                    onChange={(e) => handleDateChange(e, "start")}
+                    className={`w-full rounded-md px-3 py-2 ${inputBgClass}`}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                  {/* ✅ Applied theme mutedTextColor */}
+                  <label
+                    className={`block text-sm font-medium mb-2 ${mutedTextColor}`}
+                  >
                     End Date
                   </label>
+                  {/* ✅ Applied theme inputBgClass */}
                   <input
                     type="date"
                     value={endDate}
-                    onChange={(e) => handleDateChange(e, 'end')}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white"
+                    onChange={(e) => handleDateChange(e, "end")}
+                    className={`w-full rounded-md px-3 py-2 ${inputBgClass}`}
                   />
                 </div>
               </div>
-              
+
               {/* Study Topics */}
               <div className="mb-6">
                 <div className="flex justify-between items-center mb-2">
-                  <label className="block text-sm font-medium text-gray-400">
+                  {/* ✅ Applied theme mutedTextColor */}
+                  <label
+                    className={`block text-sm font-medium ${mutedTextColor}`}
+                  >
                     Study Topics <span className="text-red-400">*</span>
                   </label>
-                 
                 </div>
                 <div className="space-y-3">
                   {studyTopics.map((topic, index) => (
                     <div key={index} className="flex items-center gap-3">
                       <div className="flex-grow">
+                        {/* ✅ Applied theme inputBgClass */}
                         <input
                           type="text"
                           value={topic.title}
-                          onChange={(e) => handleTopicChange(index, 'title', e.target.value)}
+                          onChange={(e) =>
+                            handleTopicChange(index, "title", e.target.value)
+                          }
                           placeholder="Enter topic title (required)"
-                          className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white"
+                          className={`w-full rounded-md px-3 py-2 ${inputBgClass}`}
                         />
                       </div>
                       <div className="w-32">
                         <div className="flex items-center">
+                          {/* ✅ Applied theme inputBgClass */}
                           <input
                             type="number"
                             value={topic.hours}
                             min="0.5"
                             step="0.5"
-                            onChange={(e) => handleTopicChange(index, 'hours', e.target.value)}
-                            className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white"
+                            onChange={(e) =>
+                              handleTopicChange(index, "hours", e.target.value)
+                            }
+                            className={`w-full rounded-md px-3 py-2 ${inputBgClass}`}
                           />
-                          <span className="ml-2 text-gray-400">hrs</span>
+                          {/* ✅ Applied theme mutedTextColor */}
+                          <span className={`ml-2 ${mutedTextColor}`}>hrs</span>
                         </div>
                       </div>
                       <Button
@@ -686,7 +846,7 @@ const TimetablePage = () => {
                   <Plus size={16} className="mr-1" /> Add Topic
                 </Button>
               </div>
-              
+
               {/* Generate Button */}
               <Button
                 onClick={handleGenerateTimetable}
@@ -703,39 +863,53 @@ const TimetablePage = () => {
                 )}
               </Button>
             </div>
-            
+
             {/* Timetable Display */}
             {timetable.length > 0 && (
               <div className="mt-8">
-                <h3 className="text-xl font-semibold mb-6">Your Study Plan</h3>
+                {/* ✅ Applied theme textColor */}
+                <h3 className={`text-xl font-semibold mb-6 ${textColor}`}>
+                  Your Study Plan
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {timetable.map((day, dayIndex) => (
+                    // ✅ Applied theme formBgClass (re-used for day card)
                     <div
                       key={dayIndex}
-                      className="bg-gray-800 p-5 rounded-lg border border-gray-700"
+                      className={`p-5 rounded-lg ${formBgClass}`}
                     >
                       <h4 className="text-lg font-medium text-purple-400 mb-4">
                         {formatDate(day.date)}
                       </h4>
                       <div className="space-y-3">
                         {day.sessions.map((session, sessionIndex) => (
-                          <div 
-                            key={sessionIndex} 
+                          // ✅ Applied theme-aware session classes
+                          <div
+                            key={sessionIndex}
                             className={`p-3 rounded-md flex items-start gap-3 ${
-                              session.isBreak 
-                                ? "bg-gray-700/50 border border-gray-600" 
+                              session.isBreak
+                                ? sessionBreakClass
                                 : session.completed
-                                  ? "bg-green-900/20 border border-green-800/30"
-                                  : "bg-purple-900/20 border border-purple-800/30"
+                                ? sessionCompletedClass
+                                : sessionDefaultClass
                             }`}
                           >
-                            <div className={`p-2 rounded-full ${
-                              session.isBreak 
-                                ? "bg-gray-600" 
-                                : session.completed
-                                  ? "bg-green-700"
-                                  : "bg-purple-700"
-                            }`}>
+                            {/* ✅ Applied theme-aware icon BG */}
+                            <div
+                              className={`p-2 rounded-full ${
+                                session.isBreak
+                                  ? isDark
+                                    ? "bg-gray-600"
+                                    : "bg-gray-300"
+                                  : session.completed
+                                  ? isDark
+                                    ? "bg-green-700"
+                                    : "bg-green-300"
+                                  : isDark
+                                  ? "bg-purple-700"
+                                  : "bg-purple-300"
+                              }`}
+                            >
                               {session.isBreak ? (
                                 <Coffee size={18} />
                               ) : (
@@ -744,40 +918,76 @@ const TimetablePage = () => {
                             </div>
                             <div className="flex-grow">
                               <div className="flex justify-between items-start">
-                                <h5 className={`font-medium ${
-                                  session.isBreak 
-                                    ? "text-gray-300" 
-                                    : session.completed
-                                      ? "text-green-300"
-                                      : "text-white"
-                                }`}>
+                                {/* ✅ Applied theme-aware title color */}
+                                <h5
+                                  className={`font-medium ${
+                                    session.isBreak
+                                      ? isDark
+                                        ? "text-gray-300"
+                                        : "text-gray-600"
+                                      : session.completed
+                                      ? isDark
+                                        ? "text-green-300"
+                                        : "text-green-700"
+                                      : textColor
+                                  }`}
+                                >
                                   {session.topic}
                                   {session.completed && !session.isBreak && (
-                                    <span className="ml-2 text-xs text-green-400">(Completed)</span>
+                                    // ✅ Applied theme-aware completed text
+                                    <span
+                                      className={`ml-2 text-xs ${
+                                        isDark
+                                          ? "text-green-400"
+                                          : "text-green-600"
+                                      }`}
+                                    >
+                                      (Completed)
+                                    </span>
                                   )}
                                 </h5>
-                                <div className="flex items-center text-sm text-gray-400">
+                                {/* ✅ Applied theme mutedTextColor */}
+                                <div
+                                  className={`flex items-center text-sm ${mutedTextColor}`}
+                                >
                                   <Clock size={14} className="mr-1" />
                                   <span>
-                                    {formatTimeString(session.startTime)} - {formatTimeString(session.endTime)}
+                                    {formatTimeString(session.startTime)} -{" "}
+                                    {formatTimeString(session.endTime)}
                                   </span>
                                 </div>
                               </div>
                               <div className="flex justify-between items-center">
-                                <p className="text-sm text-gray-400 mt-1">
-                                  {session.isBreak 
-                                    ? `${session.duration} min break` 
-                                    : `${session.duration / 60} hour${session.duration / 60 !== 1 ? 's' : ''} study session`}
+                                {/* ✅ Applied theme mutedTextColor */}
+                                <p
+                                  className={`text-sm ${mutedTextColor} mt-1`}
+                                >
+                                  {session.isBreak
+                                    ? `${session.duration} min break`
+                                    : `${session.duration / 60} hour${
+                                        session.duration / 60 !== 1 ? "s" : ""
+                                      } study session`}
                                 </p>
                                 {!session.isBreak && (
+                                  // ✅ Applied theme-aware button text
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => toggleSessionCompleted(dayIndex, sessionIndex, !!session.completed)}
+                                    onClick={() =>
+                                      toggleSessionCompleted(
+                                        dayIndex,
+                                        sessionIndex,
+                                        !!session.completed
+                                      )
+                                    }
                                     className={`mt-1 ${
-                                      session.completed 
-                                        ? "text-green-400 hover:text-green-500" 
-                                        : "text-gray-400 hover:text-purple-400"
+                                      session.completed
+                                        ? isDark
+                                          ? "text-green-400 hover:text-green-500"
+                                          : "text-green-600 hover:text-green-700"
+                                        : isDark
+                                        ? "text-gray-400 hover:text-purple-400"
+                                        : "text-gray-500 hover:text-purple-600"
                                     }`}
                                   >
                                     {session.completed ? (
@@ -785,7 +995,9 @@ const TimetablePage = () => {
                                     ) : (
                                       <Circle size={18} className="mr-1" />
                                     )}
-                                    {session.completed ? "Completed" : "Mark as Done"}
+                                    {session.completed
+                                      ? "Completed"
+                                      : "Mark as Done"}
                                   </Button>
                                 )}
                               </div>

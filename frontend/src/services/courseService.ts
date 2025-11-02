@@ -1,5 +1,9 @@
 import apiRequest from './api';
 
+// ========================
+// Interface Definitions
+// ========================
+
 export interface Course {
   _id: string;
   subject: string;
@@ -24,6 +28,14 @@ export interface Course {
     notes: string;
     createdAt: string;
   }[];
+  hasLectures?: boolean;
+  lectures?: {
+    _id: string;
+    title: string;
+    url: string;
+    duration: string;
+  }[];
+  hasRoadmap?: boolean; // <-- ADDED
 }
 
 export interface Topic {
@@ -35,6 +47,10 @@ export interface Topic {
   estimatedHours?: number;
   status: 'pending' | 'in-progress' | 'completed';
 }
+
+// ========================
+// Course Management
+// ========================
 
 // Get all courses for the current user
 export const getMyCourses = async () => {
@@ -71,61 +87,67 @@ export const saveTopicNotes = async (courseId: string, topicId: string, content:
   return apiRequest(`/course/notes/${courseId}/${topicId}`, 'POST', { content });
 };
 
-// Generate study planner for a course
-export const generateTimetable = async (courseId: string, data: { 
-  startDate: string, 
-  endDate: string, 
-  topics: { title: string, hours: number }[] 
-}) => {
+// ========================
+// Timetable Management
+// ========================
+
+export const generateTimetable = async (
+  courseId: string,
+  data: {
+    startDate: string;
+    endDate: string;
+    topics: { title: string; hours: number }[];
+  }
+) => {
   const { startDate, endDate, topics } = data;
-  console.log("Generating timetable with:", { courseId, startDate, endDate, topics });
-  
-  // Validate topics before sending to API
-  const validatedTopics = topics && Array.isArray(topics) ? topics.map(topic => ({
-    title: topic.title || `Topic ${Math.random().toString(36).substring(7)}`, // Ensure title exists
-    hours: topic.hours <= 0 ? 1 : topic.hours // Ensure minimum 1 hour per topic
-  })) : [];
-  
-  console.log("Sending validated topics to API:", validatedTopics);
-  
+
+  const validatedTopics = topics && Array.isArray(topics)
+    ? topics.map(topic => ({
+        title: topic.title || `Topic ${Math.random().toString(36).substring(7)}`,
+        hours: topic.hours <= 0 ? 1 : topic.hours,
+      }))
+    : [];
+
   try {
-    // Make sure we have valid topics to send to API
-    const topicsToSend = validatedTopics && Array.isArray(validatedTopics) 
-      ? validatedTopics 
-      : [];
-    
+    const topicsToSend = validatedTopics && Array.isArray(validatedTopics) ? validatedTopics : [];
+
     if (topicsToSend.length === 0) {
       console.error('Error: No valid topics to send to API');
     }
-    
-    // Try the API call with flag to update the course
-    const response = await apiRequest(`/timetable/${courseId}`, 'POST', { 
-      startDate, 
-      endDate, 
-      topics: topicsToSend,
-      updateCourse: true // Flag to update the course's hasTimetable field
-    }, 60000); // Use a 60-second timeout for timetable generation
-    
-    // If successful, update the course to mark that it has a timetable
+
+    const response = await apiRequest(
+      `/timetable/${courseId}`,
+      'POST',
+      {
+        startDate,
+        endDate,
+        topics: topicsToSend,
+        updateCourse: true,
+      },
+      60000 // 60s timeout
+    );
+
     try {
       await updateCourseFlags(courseId, { hasTimetable: true });
-      console.log("Updated course to mark timetable as generated");
+      console.log('Updated course to mark timetable as generated');
     } catch (updateError) {
-      console.error("Failed to update course flags:", updateError);
-      // Don't throw an error here, just log it
-      // The timetable is still saved even if we can't update the flag
+      console.error('Failed to update course flags:', updateError);
     }
-    
+
     return response;
   } catch (error) {
     console.error('Error generating timetable:', error);
-    // Let the component handle the error and generate a fallback timetable
     throw error;
   }
 };
 
 // Mark a study session as completed
-export const markSessionCompleted = async (courseId: string, dateIndex: number, sessionIndex: number, completed: boolean) => {
+export const markSessionCompleted = async (
+  courseId: string,
+  dateIndex: number,
+  sessionIndex: number,
+  completed: boolean
+) => {
   return apiRequest(`/timetable/${courseId}/${dateIndex}/${sessionIndex}`, 'PATCH', { completed });
 };
 
@@ -134,12 +156,59 @@ export const getCourseTimetable = async (courseId: string) => {
   return apiRequest(`/timetable/${courseId}`);
 };
 
-// Delete a course
+// ========================
+// Delete Course
+// ========================
+
 export const deleteCourse = async (courseId: string) => {
   return apiRequest(`/course/${courseId}`, 'DELETE');
 };
 
-// Update course flags (hasTimetable, hasQuiz, hasPdfNotes)
-export const updateCourseFlags = async (courseId: string, flags: { hasTimetable?: boolean, hasQuiz?: boolean, hasPdfNotes?: boolean }) => {
+// ========================
+// Update Course Flags
+// ========================
+
+export const updateCourseFlags = async (
+  courseId: string,
+  flags: {
+    hasTimetable?: boolean;
+    hasQuiz?: boolean;
+    hasPdfNotes?: boolean;
+    hasLectures?: boolean;
+    hasRoadmap?: boolean; // <-- ADDED
+  }
+) => {
   return apiRequest(`/course/${courseId}/update-flags`, 'PATCH', flags);
+};
+
+// ========================
+// Lecture Management
+// ========================
+
+export const getLectures = async (courseId: string) => {
+  return apiRequest(`/course/${courseId}/lectures`);
+};
+
+export const addLecture = async (
+  courseId: string,
+  lectureData: { title: string; url: string; duration: string }
+) => {
+  return apiRequest(`/course/${courseId}/lectures`, 'POST', lectureData);
+};
+
+export const deleteLecture = async (courseId: string, lectureId: string) => {
+  return apiRequest(`/course/${courseId}/lectures/${lectureId}`, 'DELETE');
+};
+
+// ========================
+// AI Roadmap Management
+// ========================
+
+export const getRoadmap = async (courseId: string) => {
+  return apiRequest(`/roadmap/${courseId}`);
+};
+
+export const generateRoadmap = async (courseId: string) => {
+  // Use a long timeout for AI-based roadmap generation
+  return apiRequest(`/roadmap/${courseId}`, 'POST', {}, 60000);
 };

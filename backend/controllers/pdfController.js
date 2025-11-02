@@ -49,11 +49,19 @@ exports.generateNotesFromPdf = (req, res) => {
         return res.status(400).json({ success: false, message: 'Course ID is required' });
       }
 
-      // Check if course exists and belongs to the user
-      const course = await Course.findOne({ _id: courseId, user: userId });
+      // --- FIX START ---
+      // Check if course exists and belongs to the user using $or
+      const course = await Course.findOne({
+        _id: courseId,
+        $or: [
+          { user: userId },
+          { userId: userId }
+        ]
+      });
       if (!course) {
         return res.status(404).json({ success: false, message: 'Course not found' });
       }
+      // --- FIX END ---
 
       // Read the PDF file
       const pdfPath = req.file.path;
@@ -122,11 +130,19 @@ exports.saveNotesToCourse = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Course ID and notes are required' });
     }
 
-    // Check if course exists and belongs to the user
-    const course = await Course.findOne({ _id: courseId, user: userId });
+    // --- FIX START ---
+    // Check if course exists and belongs to the user using $or
+    const course = await Course.findOne({
+      _id: courseId,
+      $or: [
+        { user: userId },
+        { userId: userId }
+      ]
+    });
     if (!course) {
       return res.status(404).json({ success: false, message: 'Course not found' });
     }
+    // --- FIX END ---
 
     // Initialize pdfNotes array if it doesn't exist
     if (!course.pdfNotes) {
@@ -162,11 +178,19 @@ exports.getPdfNotes = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Course ID is required' });
     }
 
-    // Check if course exists and belongs to the user
-    const course = await Course.findOne({ _id: courseId, user: userId });
+    // --- FIX START ---
+    // Check if course exists and belongs to the user using $or
+    const course = await Course.findOne({
+      _id: courseId,
+      $or: [
+        { user: userId },
+        { userId: userId }
+      ]
+    });
     if (!course) {
       return res.status(404).json({ success: false, message: 'Course not found' });
     }
+    // --- FIX END ---
 
     // Return the PDF notes
     res.status(200).json({

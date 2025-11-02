@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import gsap from "gsap";
-import { NotebookText, Brain, CalendarClock, FileText } from "lucide-react";
+import { NotebookText, Brain, CalendarClock, FileText, Video, Map } from "lucide-react"; // <-- Make sure Video and Map are imported
 import Navbar from "../components/Navbar";
 
 export default function OptionsPage() {
@@ -50,9 +50,38 @@ export default function OptionsPage() {
     }
   };
 
+  // <-- MODIFIED: This function now handles the redirect flow -->
   const handleNavigation = (path: string) => {
-    navigate(path, {
-      state: { subject, level },
+    // All buttons navigate to /course-notes to ensure the course is created.
+    // We pass a 'redirectTo' state for where to go *after* creation.
+    // We also pass 'generate: true' for pages that need to auto-generate.
+    
+    // '/course-notes' is the default, no redirect needed.
+    if (path === "/course-notes") {
+      navigate("/course-notes", {
+        state: { subject, level },
+      });
+      return;
+    }
+
+    // For all other pages, set the redirectTo path
+    let redirectTo = path;
+    let generate = true;
+
+    // Special case: /lectures and /upload-pdf don't need 'generate: true'
+    if (path === "/lectures" || path === "/upload-pdf") {
+      generate = false;
+    }
+    
+    // We navigate to /course-notes, which will handle the course creation
+    // and then redirect to the 'redirectTo' path with the new courseId.
+    navigate("/course-notes", {
+      state: { 
+        subject, 
+        level, 
+        redirectTo: redirectTo, // e.g., "/lectures"
+        generate: generate      // e.g., false
+      },
     });
   };
 
@@ -89,7 +118,8 @@ export default function OptionsPage() {
           <span className="text-purple-400">{subject}</span> ({level})?
         </h2>
 
-        <div className="flex flex-wrap justify-center gap-8">
+        {/* <-- MODIFIED: Grid layout and new items --> */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 justify-items-center gap-8">
           <OptionCard
             refCallback={addCardRef}
             icon={<NotebookText size={36} />}
@@ -100,12 +130,12 @@ export default function OptionsPage() {
             refCallback={addCardRef}
             icon={<Brain size={36} />}
             title="Topic-wise Quiz"
-            onClick={() => handleNavigation("/QuizPage")}
+            onClick={() => handleNavigation("/quiz")}
           />
           <OptionCard
             refCallback={addCardRef}
             icon={<CalendarClock size={36} />}
-            title="Generate RoadMap"
+            title="Generate Study Plan"
             onClick={() => handleNavigation("/timetable")}
           />
           <OptionCard
@@ -113,6 +143,18 @@ export default function OptionsPage() {
            icon={<FileText size={36} />}
            title="Generate Notes from PDF"
            onClick={() => handleNavigation("/upload-pdf")}
+          />
+          <OptionCard
+           refCallback={addCardRef}
+           icon={<Video size={36} />}
+           title="Add/View Lectures"
+           onClick={() => handleNavigation("/lectures")}
+          />
+          <OptionCard
+           refCallback={addCardRef}
+           icon={<Map size={36} />}
+           title="Generate AI Roadmap"
+           onClick={() => handleNavigation("/roadmap")}
           />
         </div>
       </div>

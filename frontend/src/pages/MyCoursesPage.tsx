@@ -13,6 +13,8 @@ import {
   Plus,
   Trash2,
   AlertCircle,
+  Map,
+  Video
 } from "lucide-react";
 import { getMyCourses, deleteCourse, Course as CourseType } from "../services/courseService";
 import { useToast } from "@/components/ui/use-toast";
@@ -29,6 +31,8 @@ interface CourseWithProgress {
   hasQuiz?: boolean;
   hasTimetable?: boolean;
   hasPdfNotes?: boolean;
+  hasRoadmap?: boolean;
+  hasLectures?: boolean;
   topics?: {
     _id: string;
     title: string;
@@ -86,7 +90,7 @@ const MyCoursesPage = () => {
       
       if (response && response.courses) {
         // Transform the courses to match our interface
-        const formattedCourses = response.courses.map((course: CourseType) => ({
+        const formattedCourses = response.courses.map((course: any) => ({
           _id: course._id,
           subject: course.subject,
           difficulty: course.difficulty,
@@ -98,6 +102,8 @@ const MyCoursesPage = () => {
           hasQuiz: course.hasQuiz || false,
           hasTimetable: course.hasTimetable || false,
           hasPdfNotes: course.pdfNotes && course.pdfNotes.length > 0,
+          hasRoadmap: course.hasRoadmap || false,
+          hasLectures: course.hasLectures || false,
           topics: course.topics || [], // Include topics from the course
           pdfNotes: course.pdfNotes || [] // Include PDF notes from the course
         }));
@@ -311,26 +317,28 @@ const MyCoursesPage = () => {
                     <h3 className="text-lg font-medium mb-4">
                       Course Materials
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       <CourseOption
                         icon={<FileText size={24} />}
                         title="Notes"
                         isGenerated={true} // Notes are always generated with the course
                         onGenerate={() => {}}
-                        onView={() => navigate("/course-notes", {
-                          state: { courseId: course._id, subject: course.subject, level: course.difficulty }
+                        onView={() => navigate(`/course-notes/${course._id}`, {
+                          state: { subject: course.subject, level: course.difficulty }
                         })}
                       />
                       <CourseOption
                         icon={<Brain size={24} />}
                         title="Quiz"
                         isGenerated={course.hasQuiz === true} // Explicitly check for true
-                        onGenerate={() => navigate("/QuizPage", {
-                          state: { courseId: course._id, subject: course.subject, level: course.difficulty, generate: true }
+                        // --- FIX START: Changed path from /QuizPage to /quiz ---
+                        onGenerate={() => navigate(`/quiz/${course._id}`, {
+                          state: { subject: course.subject, level: course.difficulty, generate: true }
                         })}
-                        onView={() => navigate("/QuizPage", {
-                          state: { courseId: course._id, subject: course.subject, level: course.difficulty }
+                        onView={() => navigate(`/quiz/${course._id}`, {
+                          state: { subject: course.subject, level: course.difficulty }
                         })}
+                        // --- FIX END ---
                       />
                       <CourseOption
                         icon={<CalendarClock size={24} />}
@@ -338,9 +346,8 @@ const MyCoursesPage = () => {
                         isGenerated={course.hasTimetable === true}
                         onGenerate={() => {
                           console.log("Navigating to timetable with course:", course._id);
-                          navigate("/timetable", {
+                          navigate(`/timetable/${course._id}`, {
                             state: { 
-                              courseId: course._id, 
                               subject: course.subject, 
                               level: course.difficulty, 
                               generate: true,
@@ -350,9 +357,8 @@ const MyCoursesPage = () => {
                         }}
                         onView={() => {
                           console.log("Viewing timetable for course:", course._id);
-                          navigate("/timetable", {
+                          navigate(`/timetable/${course._id}`, {
                             state: { 
-                              courseId: course._id, 
                               subject: course.subject, 
                               level: course.difficulty
                             }
@@ -363,11 +369,33 @@ const MyCoursesPage = () => {
                         icon={<BookOpen size={24} />}
                         title="PDF Notes"
                         isGenerated={course.pdfNotes && course.pdfNotes.length > 0}
-                        onGenerate={() => navigate("/upload-pdf", {
-                          state: { courseId: course._id, subject: course.subject, level: course.difficulty }
+                        onGenerate={() => navigate(`/upload-pdf/${course._id}`, {
+                          state: { subject: course.subject, level: course.difficulty }
                         })}
-                        onView={() => navigate("/upload-pdf", {
-                          state: { courseId: course._id, subject: course.subject, level: course.difficulty }
+                        onView={() => navigate(`/upload-pdf/${course._id}`, {
+                          state: { subject: course.subject, level: course.difficulty }
+                        })}
+                      />
+                      <CourseOption
+                        icon={<Map size={24} />}
+                        title="AI Roadmap"
+                        isGenerated={course.hasRoadmap === true}
+                        onGenerate={() => navigate(`/roadmap/${course._id}`, {
+                          state: { subject: course.subject, level: course.difficulty, generate: true }
+                        })}
+                        onView={() => navigate(`/roadmap/${course._id}`, {
+                          state: { subject: course.subject, level: course.difficulty }
+                        })}
+                      />
+                      <CourseOption
+                        icon={<Video size={24} />}
+                        title="Lectures"
+                        isGenerated={course.hasLectures === true}
+                        onGenerate={() => navigate(`/lectures/${course._id}`, {
+                          state: { subject: course.subject, level: course.difficulty }
+                        })}
+                        onView={() => navigate(`/lectures/${course._id}`, {
+                          state: { subject: course.subject, level: course.difficulty }
                         })}
                       />
                     </div>

@@ -29,9 +29,12 @@ router.post('/generate', authenticateJWT, async (req, res) => {
 
     // Check if course already exists
     const existingCourse = await Course.findOne({ 
-      user: userId, 
-      subject, 
-      difficulty: difficultyLevel 
+      subject: subject, 
+      difficulty: difficultyLevel,
+      $or: [
+        { user: userId },
+        { userId: userId }
+      ]
     });
 
     if (existingCourse) {
@@ -155,12 +158,22 @@ router.get('/my-courses', authenticateJWT, async (req, res) => {
     const userId = req.user.userId;
     
     // Get all courses for the user
-    const courses = await Course.find({ user: userId })
+    const courses = await Course.find({ 
+      $or: [
+        { user: userId },
+        { userId: userId }
+      ]
+    })
       .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
       .skip((page - 1) * limit)
       .limit(Number(limit));
 
-    const totalCourses = await Course.countDocuments({ user: userId });
+    const totalCourses = await Course.countDocuments({ 
+      $or: [
+        { user: userId },
+        { userId: userId }
+      ]
+    });
     const totalPages = Math.ceil(totalCourses / limit);
 
     // Get quiz information for each course
@@ -186,8 +199,6 @@ router.get('/my-courses', authenticateJWT, async (req, res) => {
         ]
       });
       
-      console.log(`Course ${course.subject}: Quiz exists: ${!!quiz}`);
-      
       // Check if a timetable exists for this course
       let timetable = null;
       if (Timetable) {
@@ -201,7 +212,9 @@ router.get('/my-courses', authenticateJWT, async (req, res) => {
         ...courseObj,
         hasQuiz: !!quiz,
         hasTimetable: !!timetable,
-        hasPdfNotes: false // Default to false since we don't have the model
+        // hasPdfNotes is already on the courseObj
+        // hasLectures is already on the courseObj
+        // hasRoadmap is already on the courseObj
       };
     }));
 
@@ -818,7 +831,7 @@ router.post('/:courseId/update-progress', authenticateJWT, async (req, res) => {
 router.patch('/:courseId/update-flags', authenticateJWT, async (req, res) => {
   try {
     const { courseId } = req.params;
-    const { hasTimetable, hasQuiz, hasPdfNotes } = req.body;
+    const { hasTimetable, hasQuiz, hasPdfNotes, hasLectures, hasRoadmap } = req.body;
     const userId = req.user.userId;
 
     console.log(`Updating flags for course ${courseId}:`, req.body);
@@ -846,6 +859,15 @@ router.patch('/:courseId/update-flags', authenticateJWT, async (req, res) => {
     if (hasPdfNotes !== undefined) {
       course.hasPdfNotes = hasPdfNotes;
     }
+    // --- FIX START ---
+    // Add logic to update new flags
+    if (hasLectures !== undefined) {
+      course.hasLectures = hasLectures;
+    }
+    if (hasRoadmap !== undefined) {
+      course.hasRoadmap = hasRoadmap;
+    }
+    // --- FIX END ---
 
     await course.save();
 
@@ -856,7 +878,9 @@ router.patch('/:courseId/update-flags', authenticateJWT, async (req, res) => {
         _id: course._id,
         hasTimetable: course.hasTimetable,
         hasQuiz: course.hasQuiz,
-        hasPdfNotes: course.hasPdfNotes
+        hasPdfNotes: course.hasPdfNotes,
+        hasLectures: course.hasLectures, // --- FIX: Return new flag
+        hasRoadmap: course.hasRoadmap   // --- FIX: Return new flag
       }
     });
   } catch (error) {
@@ -897,6 +921,94 @@ router.post('/progress/update/:courseId', authenticateJWT, async (req, res) => {
   }
 });
 
+// --- FIX START: ADD LECTURE ROUTES ---
 
+// GET /api/course/:courseId/lectures
+router.get('/:courseId/lectures', authenticateJWT, async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const userId = req.user.userId;
+
+    const course = await Course.findOne({
+      _id: courseId,
+      $or: [{ user: userId }, { userId: userId }]
+    });
+
+    if (!course) {
+      return res.status(404).json({ message: 'Course not found' });
+    }
+
+    res.status(200).json({ lectures: course.lectures || [] });
+  } catch (err) {
+    console.error('❌ Error fetching lectures:', err);
+    res.status(500).json({ message: 'Failed to fetch lectures' });
+  }
+});
+
+// POST /api/course/:courseId/lectures
+router.post('/:courseId/lectures', authenticateJWT, async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const userId = req.user.userId;
+    const { title, url, duration } = req.body;
+
+    if (!title || !url) {
+      return res.status(400).json({ message: 'Title and URL are required' });
+    }
+
+    const course = await Course.findOne({
+      _id: courseId,
+      $or: [{ user: userId }, { userId: userId }]
+    });
+
+    if (!course) {
+      return res.status(404).json({ message: 'Course not found' });
+    }
+
+    const newLecture = { title, url, duration };
+    course.lectures.push(newLecture);
+    await course.save();
+
+    res.status(201).json({ lectures: course.lectures });
+  } catch (err) {
+    console.error('❌ Error adding lecture:', err);
+    res.status(500).json({ message: 'Failed to add lecture' });
+  }
+});
+
+// DELETE /api/course/:courseId/lectures/:lectureId
+router.delete('/:courseId/lectures/:lectureId', authenticateJWT, async (req, res) => {
+  try {
+    const { courseId, lectureId } = req.params;
+    const userId = req.user.userId;
+
+    const course = await Course.findOne({
+      _id: courseId,
+      $or: [{ user: userId }, { userId: userId }]
+    });
+
+    if (!course) {
+      return res.status(404).json({ message: 'Course not found' });
+    }
+
+    // Find the index of the lecture to remove
+    const lectureIndex = course.lectures.findIndex(lec => lec._id.toString() === lectureId);
+
+    if (lectureIndex === -1) {
+      return res.status(404).json({ message: 'Lecture not found' });
+    }
+
+    // Remove the lecture from the array
+    course.lectures.splice(lectureIndex, 1);
+    await course.save();
+
+    res.status(200).json({ lectures: course.lectures });
+  } catch (err) {
+    console.error('❌ Error deleting lecture:', err);
+    res.status(500).json({ message: 'Failed to delete lecture' });
+  }
+});
+
+// --- FIX END ---
 
 module.exports = router;

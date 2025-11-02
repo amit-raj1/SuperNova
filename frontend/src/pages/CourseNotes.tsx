@@ -1,52 +1,65 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import gsap from "gsap";
 import Navbar from "../components/Navbar";
 import ChatBot from "../components/ChatBot";
 import { generateNotes } from "../utils/api";
-import { Download, MessageSquare, Check, CheckCircle2 } from "lucide-react";
+import {
+  Download,
+  MessageSquare,
+  Check,
+  CheckCircle2,
+  Loader2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { exportNotesAsDocx } from "../utils/exportDoc";
-import html2pdf from "html2pdf.js"; 
+import html2pdf from "html2pdf.js";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
-import { 
-  getMyCourses, 
-  Course, 
-  Topic, 
-  markTopicCompleted, 
-  getCourseProgress 
+import { useTheme } from "../context/ThemeContext"; // ✅ Added theme support
+import {
+  getMyCourses,
+  Course,
+  Topic,
+  markTopicCompleted,
+  getCourseProgress,
 } from "../services/courseService";
 
 export default function CourseNotes() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { courseId, subject, level } = location.state || { courseId: "", subject: "", level: "" };
   const { toast } = useToast();
   const { user } = useAuth();
+  const { theme, isDark, isWhite } = useTheme(); // ✅ Theme context
 
-  // Redirect admin users to admin dashboard
-  useEffect(() => {
-    if (user?.role === 'admin') {
-      toast({
-        title: "Access Restricted",
-        description: "Admin users cannot access learner features.",
-        variant: "destructive",
-      });
-      navigate('/admin');
-    }
-  }, [user, navigate, toast]);
-  
+  const { courseId: paramCourseId } = useParams<{ courseId: string }>();
+  const { subject, level, redirectTo, generate } = location.state || {};
+
+  const [courseId, setCourseId] = useState<string | null>(paramCourseId || null);
   const formRef = useRef<HTMLDivElement>(null);
   const shapesRef = useRef<HTMLDivElement[]>([]);
   const notesRef = useRef<HTMLDivElement>(null);
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [course, setCourse] = useState<Course | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [completedTopics, setCompletedTopics] = useState<string[]>([]);
   const [showChatBot, setShowChatBot] = useState(false);
   const [markingCompleted, setMarkingCompleted] = useState<string | null>(null);
 
+  // 🚫 Restrict admin access
+  useEffect(() => {
+    if (user?.role === "admin") {
+      toast({
+        title: "Access Restricted",
+        description: "Admin users cannot access learner features.",
+        variant: "destructive",
+      });
+      navigate("/admin");
+    }
+  }, [user, navigate, toast]);
+
+  // ⚙️ Load or generate course data
   useEffect(() => {
     gsap.fromTo(
       formRef.current,
@@ -65,76 +78,60 @@ export default function CourseNotes() {
       });
     });
 
-    // Fetch course data if courseId is provided
-    if (courseId) {
-      console.log("🔍 CourseID detected, fetching course data:", courseId);
-      fetchCourseData();
+    if (paramCourseId) {
+      setCourseId(paramCourseId);
+      fetchCourseData(paramCourseId);
+    } else if (subject && level) {
+      handleGenerateNotes();
     } else {
-      console.log("⚠️ No courseId available, skipping data fetch");
-    }
-  }, [courseId]);
-  
-  // Debug log for topics
-  useEffect(() => {
-    console.log("🔍 Topics updated:", topics.length, topics);
-  }, [topics]);
-
-  const fetchCourseData = async () => {
-    try {
-      setLoading(true);
-      console.log("🔍 Fetching course data for ID:", courseId);
-      
-      // Fetch course data
-      const response = await getMyCourses();
-      console.log("🔍 All courses:", response);
-      
-      if (!response || !response.courses || !Array.isArray(response.courses)) {
-        console.error("❌ Invalid response format:", response);
-        throw new Error("Invalid response format from server");
-      }
-      
-      const foundCourse = response.courses.find((c: Course) => c._id === courseId);
-      console.log("🔍 Found course:", foundCourse);
-      
-      if (foundCourse) {
-        setCourse(foundCourse);
-        
-        if (foundCourse.topics && Array.isArray(foundCourse.topics)) {
-          console.log("✅ Setting topics:", foundCourse.topics.length, "topics");
-          setTopics(foundCourse.topics);
-        } else {
-          console.error("❌ Invalid topics format:", foundCourse.topics);
-          setTopics([]);
-        }
-        
-        // Fetch completed topics
-        try {
-          const progressResponse = await getCourseProgress(courseId);
-          console.log("🔍 Progress response:", progressResponse);
-          
-          if (progressResponse && progressResponse.completedTopics) {
-            const completedTopicIds = progressResponse.completedTopics.map(
-              (topic: { topicId: string }) => topic.topicId
-            );
-            setCompletedTopics(completedTopicIds);
-          }
-        } catch (progressError) {
-          console.error("❌ Error fetching progress:", progressError);
-          // Don't fail the whole operation if progress fetch fails
-        }
-      } else {
-        console.error("❌ Course not found in response");
-        toast({
-          title: "Error",
-          description: "Course not found. Please try refreshing the page.",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("❌ Failed to fetch course data:", error);
       toast({
         title: "Error",
-        description: "Failed to load course data. Please try again.",
+        description: "No course information found.",
+        variant: "destructive",
+      });
+      navigate("/my-courses");
+    }
+  }, [paramCourseId, user]);
+
+  const fetchCourseData = async (id: string) => {
+    try {
+      setLoading(true);
+      const response = await getMyCourses();
+      if (!response?.courses || !Array.isArray(response.courses)) {
+        throw new Error("Invalid response from server");
+      }
+
+      const foundCourse = response.courses.find((c: Course) => c._id === id);
+
+      if (foundCourse) {
+        setCourse(foundCourse);
+        setTopics(foundCourse.topics || []);
+
+        try {
+          const progressResponse = await getCourseProgress(id);
+          if (progressResponse?.completedTopics) {
+            setCompletedTopics(
+              progressResponse.completedTopics.map(
+                (t: { topicId: string }) => t.topicId
+              )
+            );
+          }
+        } catch (progressError) {
+          console.error("Error fetching progress:", progressError);
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: "Course not found.",
+          variant: "destructive",
+        });
+        navigate("/my-courses");
+      }
+    } catch (error) {
+      console.error("Error fetching course data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load course data.",
         variant: "destructive",
       });
     } finally {
@@ -143,88 +140,54 @@ export default function CourseNotes() {
   };
 
   const addShapeRef = (el: HTMLDivElement | null) => {
-    if (el && !shapesRef.current.includes(el)) {
-      shapesRef.current.push(el);
-    }
+    if (el && !shapesRef.current.includes(el)) shapesRef.current.push(el);
   };
 
   const handleGenerateNotes = async () => {
-    // Check if token exists
-    const currentToken = localStorage.getItem("token");
-    if (!currentToken) {
+    const token = localStorage.getItem("token");
+    if (!token) {
       toast({
         title: "Authentication Error",
-        description: "You need to be logged in to generate notes. Please log in and try again.",
+        description: "You need to be logged in to generate notes.",
         variant: "destructive",
       });
-      setLoading(false);
+      navigate("/login");
       return;
     }
 
-    console.log("🔍 Generating notes for subject:", subject, "level:", level);
-    
     setLoading(true);
-
-    // Wait for the next render cycle to ensure the loader element exists
-    setTimeout(() => {
-      const loaderElement = document.querySelector(".generate-loader");
-      if (loaderElement) {
-        const tl = gsap.timeline();
-        tl.to(".generate-loader", {
-          opacity: 1,
-          scale: 1,
-          duration: 0.6,
-          ease: "back.out(1.7)",
-        });
-      }
-    }, 0);
-
     try {
       const response = await generateNotes(subject, level);
-      console.log("✅ Notes generated successfully:", response ? "Yes (length: " + (response.notes?.length || 0) + ")" : "No");
-      
-      // Get the newly created course from the response
-      if (response && response.course) {
+      if (response?.course) {
         const newCourse = response.course;
-        console.log("Found course from API response:", newCourse);
-        
         setCourse(newCourse);
         setTopics(newCourse.topics);
-        
-        // Update URL state with the new courseId
-        window.history.replaceState(
-          { ...location.state, courseId: newCourse._id },
-          '',
-          location.pathname
-        );
-        
-        toast({
-          title: "Success",
-          description: "Notes generated successfully!",
-        });
-      } else {
-        console.error("Could not get course from API response");
-        // Check if it's an error message
-        if (response && response.notes && response.notes.startsWith("Error:")) {
-          toast({
-            title: "Error",
-            description: response.notes,
-            variant: "destructive",
+        setCourseId(newCourse._id);
+
+        if (redirectTo) {
+          const newPath = `${redirectTo}/${newCourse._id}`;
+          toast({ title: "Success", description: "Course created! Redirecting..." });
+          navigate(newPath, {
+            state: { ...location.state, courseId: newCourse._id },
+            replace: true,
           });
         } else {
-          toast({
-            title: "Warning",
-            description: "Notes were generated but the course could not be loaded. Please refresh the page.",
+          navigate(`/course-notes/${newCourse._id}`, {
+            state: { ...location.state, courseId: newCourse._id },
+            replace: true,
           });
         }
+      } else {
+        throw new Error("Failed to get course data");
       }
     } catch (error) {
-      console.error("❌ Error generating notes:", error);
+      console.error("Error generating notes:", error);
       toast({
         title: "Error",
-        description: "Failed to generate notes. Please make sure you're logged in and try again.",
+        description: "Failed to generate notes. Try again.",
         variant: "destructive",
       });
+      navigate("/CourseSetup");
     } finally {
       setLoading(false);
     }
@@ -234,7 +197,7 @@ export default function CourseNotes() {
     if (!courseId) {
       toast({
         title: "Error",
-        description: "Course ID is missing. Please try again.",
+        description: "Missing course ID.",
         variant: "destructive",
       });
       return;
@@ -243,35 +206,21 @@ export default function CourseNotes() {
     try {
       setMarkingCompleted(topicId);
       const response = await markTopicCompleted(topicId, courseId);
-      
-      // Update local state
       setCompletedTopics((prev) => [...prev, topicId]);
-      
-      // Update course progress in local state
-      if (course && response && response.progress) {
+
+      if (course && response?.progress) {
         setCourse({
           ...course,
-          progress: {
-            ...course.progress,
-            completedTopics: response.progress.completedTopics,
-            totalTopics: response.progress.totalTopics
-          }
+          progress: response.progress,
         });
-        
-        // Store the updated progress in sessionStorage to be used when returning to MyCoursesPage
-        sessionStorage.setItem('courseProgressUpdated', 'true');
-        sessionStorage.setItem('updatedCourseId', courseId);
       }
-      
-      toast({
-        title: "Success",
-        description: "Topic marked as completed!",
-      });
+
+      toast({ title: "Success", description: "Topic marked as completed!" });
     } catch (error) {
-      console.error("Failed to mark topic as completed:", error);
+      console.error("Error marking completed:", error);
       toast({
         title: "Error",
-        description: "Failed to mark topic as completed. Please try again.",
+        description: "Failed to mark topic as completed.",
         variant: "destructive",
       });
     } finally {
@@ -281,25 +230,84 @@ export default function CourseNotes() {
 
   const handleDownloadPDF = () => {
     if (notesRef.current) {
-      html2pdf().from(notesRef.current).save(`${subject}_${level}_notes.pdf`);
+      html2pdf()
+        .from(notesRef.current)
+        .save(
+          `${course?.subject || subject}_${
+            course?.difficulty || level
+          }_notes.pdf`
+        );
     }
   };
 
   const handleDownloadDocx = () => {
     if (topics.length > 0) {
-      const notesContent = topics.map(topic => 
-        `${topic.title}\n\n${topic.content || topic.notes}`
-      ).join('\n\n');
-      
-      exportNotesAsDocx(`${subject}_${level}_notes`, notesContent);
+      const notesContent = topics
+        .map((t) => `${t.title}\n\n${t.content || t.notes}`)
+        .join("\n\n");
+      exportNotesAsDocx(
+        `${course?.subject || subject}_${course?.difficulty || level}_notes`,
+        notesContent
+      );
     }
   };
 
+  // 🎨 Dynamic background based on theme
+  const bgClass = isDark
+    ? "bg-gradient-to-br from-gray-950 via-black to-gray-900 text-gray-100"
+    : isWhite
+    ? "bg-white text-gray-900"
+    : "bg-gradient-to-br from-purple-100 via-pink-50 to-indigo-100 text-gray-800";
+
+  // ✅ CHANGED: Set text to dark black for white theme
+  const textColor = isDark
+    ? "text-gray-200"
+    : isWhite
+    ? "text-gray-900" // Dark black text for white mode
+    : "text-gray-900";
+
+  const shapeStyles = isDark
+    ? [
+        "bg-purple-600",
+        "border border-purple-500",
+        "bg-purple-700",
+        "bg-gray-200",
+        "border-2 border-purple-600",
+        "bg-purple-800",
+        "border-2 border-purple-500",
+        "bg-gray-300",
+        "bg-purple-500",
+      ]
+    : isWhite
+    ? [
+        "bg-gray-200",
+        "border border-gray-400",
+        "bg-gray-300",
+        "bg-gray-400",
+        "border-2 border-gray-300",
+        "bg-gray-300",
+        "border-2 border-gray-200",
+        "bg-gray-300",
+        "bg-gray-200",
+      ]
+    : [
+        "bg-purple-300",
+        "border border-purple-200",
+        "bg-pink-200",
+        "bg-white",
+        "border-2 border-indigo-200",
+        "bg-indigo-200",
+        "border-2 border-pink-100",
+        "bg-white",
+        "bg-purple-100",
+      ];
+
   return (
-    <div className="relative min-h-screen bg-black text-white overflow-hidden">
+    <div
+      className={`relative min-h-screen overflow-hidden transition-colors duration-500 ${bgClass}`}
+    >
       <Navbar />
-      
-      {/* Chat Toggle Button - Only visible when topics are loaded */}
+
       {topics.length > 0 && (
         <button
           onClick={() => setShowChatBot(!showChatBot)}
@@ -309,79 +317,108 @@ export default function CourseNotes() {
           <MessageSquare size={24} />
         </button>
       )}
-      
-      {/* ChatBot Component */}
-      <ChatBot visible={showChatBot} subject={subject} level={level} />
+      <ChatBot
+        visible={showChatBot}
+        subject={course?.subject || subject || ""}
+        level={course?.difficulty || level || ""}
+      />
 
-      {/* 🎨 Background Shapes */}
+      {/* Floating animated shapes */}
       <div className="absolute inset-0 pointer-events-none z-0">
-        {[
-          "top-4 left-8 w-8 h-8 bg-purple-500",
-          "top-6 right-10 w-12 h-12 border border-purple-400 rounded-full",
-          "top-16 left-1/3 w-5 h-5 bg-purple-700",
-          "top-24 left-10 w-10 h-10 bg-white rotate-45",
-          "bottom-20 right-20 w-16 h-16 border-2 border-purple-500 rounded-full",
-          "top-1/2 left-1/3 w-6 h-6 bg-purple-600",
-          "bottom-10 left-1/4 w-12 h-12 border-2 border-white rotate-12",
-          "top-1/4 right-1/4 w-6 h-6 bg-white rotate-45",
-          "top-1/3 left-10 w-5 h-5 bg-purple-300 rounded-full",
-        ].map((cls, i) => (
+        {shapeStyles.map((style, i) => (
           <div
             key={i}
             ref={addShapeRef}
-            className={`absolute opacity-10 ${cls}`}
+            className={`absolute opacity-10 ${style} ${
+              [
+                "top-4 left-8 w-8 h-8",
+                "top-6 right-10 w-12 h-12 rounded-full",
+                "top-16 left-1/3 w-5 h-5",
+                "top-24 left-10 w-10 h-10 rotate-45",
+                "bottom-20 right-20 w-16 h-16 rounded-full",
+                "top-1/2 left-1/3 w-6 h-6",
+                "bottom-10 left-1/4 w-12 h-12 rotate-12",
+                "top-1/4 right-1/4 w-6 h-6 rotate-45",
+                "top-1/3 left-10 w-5 h-5 rounded-full",
+              ][i]
+            }`}
           />
         ))}
       </div>
 
-      {/* 📄 Notes Section */}
-      <div ref={formRef} className="relative z-10 max-w-4xl mx-auto mt-28 p-6 text-center">
-        <h2 className="text-3xl font-bold text-white mb-6">
-          {subject} ({level}) Notes
+      {/* Notes Section */}
+      <div
+        ref={formRef}
+        className="relative z-10 max-w-4xl mx-auto mt-28 p-6 text-center"
+      >
+        <h2 className={`text-3xl font-bold mb-6 ${textColor}`}>
+          {course?.subject || subject || "Course"} (
+          {course?.difficulty || level || "Notes"})
         </h2>
 
-        {/* Course Topics Section */}
-        <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400 mb-6 tracking-tight">
+        {/* ✅ CHANGED: Removed gradient and applied textColor */}
+        <h3 className={`text-2xl font-bold mb-6 ${textColor}`}>
           Course Topics
         </h3>
 
-        {topics.length === 0 && !loading && (
-          <div className="flex flex-col items-center">
-            <p className="text-gray-400 mb-4">No notes found for this course. Click the button below to generate notes.</p>
-            <button
-              onClick={handleGenerateNotes}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-semibold shadow-lg transition-all"
-            >
-              Generate Notes
-            </button>
-          </div>
-        )}
-
         {loading && (
-          <div className="generate-loader mt-10 text-purple-400 text-lg animate-pulse">
-            Generating your notes... ✨
+          // ✅ CHANGED: Removed text-purple-500 and applied textColor
+          <div
+            className={`generate-loader mt-10 flex flex-col items-center justify-center ${textColor}`}
+          >
+            <Loader2 size={32} className="animate-spin mb-4" />
+            {subject ? "Generating your new course..." : "Loading course notes..."}{" "}
+            ✨
           </div>
         )}
 
-        {topics.length > 0 && (
+        {!loading && topics.length === 0 && (
+          <div className="flex flex-col items-center">
+            {/* ✅ CHANGED: Replaced text-gray-400 with themed text */}
+            <p className={`mb-4 ${textColor} opacity-70`}>
+              No notes found for this course.
+            </p>
+            <Button onClick={() => navigate("/my-courses")}>
+              Back to My Courses
+            </Button>
+          </div>
+        )}
+
+        {!loading && topics.length > 0 && (
           <div>
             <div
               ref={notesRef}
-              className="mt-10 bg-gradient-to-br from-gray-900 to-[#1e1e2e] p-8 rounded-xl text-left shadow-xl max-w-4xl mx-auto divide-y divide-indigo-800/30 border border-indigo-500/20"
+              // ✅ CHANGED: Removed fixed text colors from container
+              className={`mt-10 p-8 rounded-xl text-left shadow-xl max-w-4xl mx-auto divide-y ${
+                isDark
+                  ? "bg-gray-900 border border-indigo-500/20 divide-indigo-800/30"
+                  : isWhite
+                  ? "bg-white border border-gray-200 divide-gray-100"
+                  : "bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 divide-indigo-100"
+              }`}
             >
               {topics.map((topic, index) => (
                 <div key={topic._id || index} className="py-6 first:pt-0 last:pb-0">
                   <div className="flex justify-between items-start gap-4">
-                    <h2 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400 mb-4 tracking-tight">
+                    {/* This title is a gradient, which you said was visible */}
+                    <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 mb-4">
                       {topic.title}
                     </h2>
+                    {/* ✅ CHANGED: Added full theme logic to the button */}
                     <button
                       onClick={() => handleMarkTopicCompleted(topic._id)}
-                      disabled={completedTopics.includes(topic._id) || markingCompleted === topic._id}
-                      className={`mt-1 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      disabled={
+                        completedTopics.includes(topic._id) ||
+                        markingCompleted === topic._id
+                      }
+                      className={`mt-1 flex-shrink-0 items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                         completedTopics.includes(topic._id)
-                          ? "bg-green-900/30 text-green-400 cursor-default"
-                          : "bg-purple-900/30 text-purple-400 hover:bg-purple-900/50"
+                          ? isDark
+                            ? "bg-green-900/30 text-green-400 cursor-default"
+                            : "bg-green-100 text-green-700 cursor-default"
+                          : isDark
+                          ? "bg-purple-900/30 text-purple-400 hover:bg-purple-900/50"
+                          : "bg-purple-100 text-purple-700 hover:bg-purple-200"
                       }`}
                     >
                       {markingCompleted === topic._id ? (
@@ -399,16 +436,17 @@ export default function CourseNotes() {
                       )}
                     </button>
                   </div>
-                  {topic.content && (
-                    <div className="markdown-content prose-lg max-w-none text-gray-200 leading-relaxed mt-3">
-                      {topic.content}
-                    </div>
-                  )}
+                  {/* ✅ THIS IS THE FIX: The 'textColor' variable is now correctly applied here */}
+                  <div
+                    className={`markdown-content prose-lg max-w-none leading-relaxed mt-3 ${textColor}`}
+                  >
+                    {topic.content || topic.notes}
+                  </div>
                 </div>
               ))}
             </div>
 
-            {/* 📥 Download Buttons */}
+            {/* Download Buttons */}
             <div className="mt-6 flex flex-wrap justify-center gap-4 mb-10">
               <button
                 onClick={handleDownloadPDF}
@@ -416,7 +454,6 @@ export default function CourseNotes() {
               >
                 <Download size={18} /> Download PDF
               </button>
-
               <button
                 onClick={handleDownloadDocx}
                 className="inline-flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-5 py-3 rounded-xl font-semibold transition-all"

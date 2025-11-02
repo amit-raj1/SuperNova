@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -24,6 +23,8 @@ import TimetablePage from "./pages/StudyPlannerPage";
 import PdfNotesPage from "./pages/PdfNotesPage";
 import HelpSupport from "./pages/HelpSupport";
 import AdminDashboard from "./pages/AdminDashboard";
+import LecturesPage from "./pages/LecturesPage";
+import RoadmapPage from "./pages/RoadmapPage"; // <-- Make sure this is imported
 
 const App = () => {
   // Create a QueryClient instance inside the component
@@ -56,19 +57,33 @@ const App = () => {
             <Route path="/main" element={<Main />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/google-auth-success" element={<GoogleAuthSuccess />} />
+            
+            {/* User Routes */}
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/my-courses" element={<MyCoursesPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/help" element={<HelpSupport />} />
+            
+            {/* Course Creation & Materials Routes */}
             <Route path="/CourseSetup" element={<CourseSetup />} />
             <Route path="/generate" element= {<Generate />}/>
-            <Route path="/course-notes" element={<CourseNotes />} />
-            <Route path="/QuizPage" element={<QuizPage />} />
-            <Route path="/google-auth-success" element={<GoogleAuthSuccess />} />
-            <Route path="/timetable" element={<TimetablePage />} />
-            <Route path="/upload-pdf" element={<PdfNotesPage />} />
-            <Route path="/help" element={<HelpSupport />} />
+            
+            {/* <-- MODIFIED: All these routes now use :courseId --> */}
+            {/* This route handles BOTH generation (no ID) and viewing (with ID) */}
+            <Route path="/course-notes" element={<CourseNotes />} /> 
+            <Route path="/course-notes/:courseId" element={<CourseNotes />} />
+            
+            <Route path="/quiz/:courseId" element={<QuizPage />} />
+            <Route path="/timetable/:courseId" element={<TimetablePage />} />
+            <Route path="/upload-pdf/:courseId" element={<PdfNotesPage />} />
+            <Route path="/lectures/:courseId" element={<LecturesPage />} />
+            <Route path="/roadmap/:courseId" element={<RoadmapPage />} />
+
+            {/* Admin Routes */}
             <Route path="/admin" element={<AdminDashboard />} />
+
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
